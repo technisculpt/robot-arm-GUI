@@ -1,63 +1,63 @@
 import controlP5.*;
 import java.util.*;
 import processing.serial.*;
-
-Serial myPort;
+Serial myPort; // The serial port
 ControlP5 cp5;
 Knob speed;
-
-float theta1, theta2;
-
 int mainCount = 0;
+float theta1, theta2;
+float nextTheta1 = 90;
+float nextTheta2 = 90;
+float jumpLimit = 2;
 int counter = 0;
-int flag = 0;
 int l = 450; //mm
 int xOffset, yOffset;
-int knobValue = 800;
+int knobValue = 1500;
 int sspeed = 100;
-
 boolean connect = false;
 boolean motors = false;
-boolean motorState, followMouse, angleState, squareState, circleState, helloState = false;
+boolean motorState, followMouse, angleState, squareState, circleState, helloState = false; //false means off
+boolean setZero = true;
 boolean startUp = false;
+boolean flag = false;
+boolean dontSetFlag = false;
 
+String[] BUFFER = new String[256];
 
-void sendSerial(){
-  if(flag == 1){
-    counter += 1;
-  }
-  if (counter == GCODE.length){
-    counter = 0;
-  }
-  myPort.write(GCODE[counter]);
+byte bufferCounter=0;
+byte sentCounter=0;
+
+//function for the knob
+void speed(int theValue) {
+  sspeed = int(theValue);
 }
 
-
-void motorsOn(){
-    motors = true;
-    myPort.write("M17\n");
-    println("motors on");
+void motorsOn() {
+  motors = true;
+  myPort.write("M17\n");
+  println("motors on");
+  dontSetFlag = true;
 }
 
-void motorsOff(){
-    motors = false;
-    myPort.write("M18\n");
-    println("motors off");
+void motorsOff() {
+  motors = false;
+  myPort.write("M18\n");
+  println("motors off");
+  dontSetFlag = true;
 }
 
 public void set_angle() {
-  if (startUp){
+  if (startUp) {
     myPort.write("G92 Y90 Z90\n");
-    println("angle set to 0");
+    dontSetFlag = true;
   }
 }
 
 public void follow_mouse() {
-  if (startUp == true){
-    if (followMouse == true){
+  if (startUp == true) {
+    if (followMouse == true) {
       followMouse = false;
-    }
-    else{
+    } else {
       followMouse = true;
     }
     println("mouse toggled");
@@ -66,119 +66,154 @@ public void follow_mouse() {
 
 void setup()
 {
-  size(1000,800);
+  size(1000, 1000);
   printArray(Serial.list());
+  // Open the port you are using at the rate you want:
   myPort = new Serial(this, Serial.list()[0], 250000);
   xOffset = width/2;
   yOffset = height;
   cp5 = new ControlP5(this)
-   .setColorBackground(color(0, 160, 100))
-   ;
+    .setColorBackground(color(0, 160, 100))
+    ;
   cp5.addToggle("connect")
-   .setColorBackground(color(0, 160, 100))
-   .setPosition(167,40)
-   ;
+    .setColorBackground(color(0, 160, 100))
+    .setPosition(167, 40)
+    ;
   cp5.addToggle("motors")
-   .setColorBackground(color(0, 160, 100))
-   .setPosition(167,90)
-   ;
+    .setColorBackground(color(0, 160, 100))
+    .setPosition(167, 90)
+    ;
   cp5.addKnob("speed")
-   .setRange(0,1500)
-   .setValue(knobValue)
-   .setPosition(45,35)
-   .setRadius(40)
-   .setNumberOfTickMarks(30)
-   .setTickMarkLength(4)
-   .snapToTickMarks(true)
-   .setColorForeground(color(255))
-   .setColorBackground(color(0, 160, 100))
-   .setColorActive(color(0,0,255))
-   .setDragDirection(Knob.HORIZONTAL)
-   ;
+    .setRange(0, 1500)
+    .setValue(knobValue)
+    .setPosition(45, 35)
+    .setRadius(40)
+    .setNumberOfTickMarks(30)
+    .setTickMarkLength(4)
+    .snapToTickMarks(true)
+    .setColorForeground(color(255))
+    .setColorBackground(color(0, 160, 100))
+    .setColorActive(color(0, 0, 255))
+    .setDragDirection(Knob.HORIZONTAL)
+    ;
   cp5.addButton("set_angle")
-     .setValue(0)
-     .setPosition(25,150)
-     .setSize(200,19)
-     ;
+    .setValue(0)
+    .setPosition(25, 150)
+    .setSize(200, 19)
+    ;
   cp5.addButton("squares")
-     .setValue(100)
-     .setPosition(25,175)
-     .setSize(200,19)
-     ;
+    .setValue(100)
+    .setPosition(25, 175)
+    .setSize(200, 19)
+    ;
+
   cp5.addButton("circles")
-     .setPosition(25,200)
-     .setSize(200,19)
-     .setValue(0)
-     ;
+    .setPosition(25, 200)
+    .setSize(200, 19)
+    .setValue(0)
+    ;
   cp5.addButton("hello_world")
-     .setPosition(25,225)
-     .setSize(200,19)
-     .setValue(0)
-     ;
+    .setPosition(25, 225)
+    .setSize(200, 19)
+    .setValue(0)
+    ;
   cp5.addButton("follow_mouse")
-     .setPosition(25,225)
-     .setSize(200,19)
-     .setValue(0)
-     ;
-startUp = true;
+    .setPosition(25, 225)
+    .setSize(200, 19)
+    .setValue(0)
+    ;
+  startUp = true;
 }
 
-void draw(){
-  mainCount += 1;
+void draw() {
   if ((myPort.available() > 0) && (connect==true)) {
     String inBuffer = myPort.readString();   
     if (inBuffer != null) {
-      println(inBuffer);
-      if (inBuffer.equals("ok\n") == true)
-      {
-        flag = 1;
+      println("incoming: "+inBuffer);
+      if ((inBuffer.equals("ok\n") == true) && (dontSetFlag == false)) {
+        flag = true; // flag means the MCU has successfully recieved an "OK" message & we can progress to next
         println("good");
       }
+      if (dontSetFlag == true) { //for single messages easy to ignore the "OK" heartbeat
+         dontSetFlag = false;
+      }
+    }
+    if (setZero == true) {
+      myPort.write("G92 Y90 Z90\n");
+      println("angle set to 0");
+      setZero = false;
+      dontSetFlag = true;
     }
   }
-  if ((motors==true)&&(motorState==false)){
+
+  if ((motors==true)&&(motorState==false)) {
     motorsOn();
     motorState = true;
-  }
-  else if ((motors==false)&&(motorState==true)){
+  } else if ((motors==false)&&(motorState==true)) {
     motorsOff();
     motorState = false;
   }
 
   background(255);
-  fill(0,100);
+  fill(0, 100);
   strokeWeight(0);
-  rect(0,0,250,280);
+  rect(0, 0, 250, 280);
+
+  // IK section
   float y = mouseY;
   float x = mouseX;
   float a = sqrt(sq(x-xOffset)+sq(y-yOffset));
-
   float thetaC = acos((2*sq(l)-sq(a))/(2*sq(l)));
-  theta1 = (PI-thetaC)/2 + atan2(y-yOffset,x-xOffset);
+  theta1 = (PI-thetaC)/2 + atan2(y-yOffset, x-xOffset);
   float y0 = l*sin(theta1);
   float x0 = l*cos(theta1);
   theta2 = thetaC - (PI-theta1);
   float xN = l*cos(theta2);
   float yN = l*sin(theta2);
-  
   strokeWeight(4);
   stroke(0);
-  line(xOffset,yOffset,xOffset+x0,yOffset+y0);
+  line(xOffset, yOffset, xOffset+x0, yOffset+y0);
   strokeWeight(3);
   stroke(10);
-  line(xOffset+x0,yOffset+y0,xOffset+x0+xN,yOffset+y0+yN);
-  if((followMouse==true)&&(motors==true))
-  {
-    float theta11 = theta1 - theta1%0.01;
-    float theta22 = theta2 - theta2%0.01;
-    String outgoing = "G01 Z" + -degrees(theta11) + " Y" + -degrees(theta22) + " F" + sspeed+"\n";
-    println(outgoing);
-    if ((mainCount % 2) == 0){
-      myPort.write(outgoing);
-    }  
+  line(xOffset+x0, yOffset+y0, xOffset+x0+xN, yOffset+y0+yN);
+
+  //below is the drawing from the computer screen function
+  if ((mainCount%3)==0){
+    if ((followMouse==true)&&(motors==true)) {
+      float theta11 = -degrees(theta1 - theta1%0.01);
+      float theta22 = -degrees(theta2 - theta2%0.01);
+  
+      //error checking
+      if ((theta11 < 180) && (theta11 >= 0 )) {
+        nextTheta1 = theta11;
+      }
+      if ((theta22 < 270) && (theta22 >= 0)) {
+        nextTheta2 = theta22;
+      }
+  
+      String outgoing = "G01 Z" + (nextTheta1) + " Y" + (nextTheta2) + " F" + sspeed+"\n";
+  
+      //only store new values if our outgoing counter has reached the incoming counter in buffer
+      if (bufferCounter == sentCounter) {
+        BUFFER[int(bufferCounter)] = outgoing;
+        bufferCounter += 1;
+        println("stored");
+      }
+      sendGCODE();
+    }
+  }
+  mainCount += 1;
+}
+
+void sendGCODE() {
+  if (flag == true) {
+    myPort.write(BUFFER[int(sentCounter)]);
+    println("message sent");
+    sentCounter += 1;
+    flag = false;
+  } else {
+    myPort.write(BUFFER[int(sentCounter)]);
+    println("message sent after failed attempt");
   }
 }
 
-void speed(int theValue) {
-  sspeed = int(theValue);
-}
