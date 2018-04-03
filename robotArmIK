@@ -178,8 +178,8 @@ void draw() {
   line(xOffset+x0, yOffset+y0, xOffset+x0+xN, yOffset+y0+yN);
 
   //below is the drawing from the computer screen function.
-  //%3 beacuse if we spam the MCU it freaks out
-  if ((mainCount%3)==0){
+  //modulo beacuse if we spam the MCU it freaks out
+  if ((mainCount%2)==0){
     if ((followMouse==true)&&(motors==true)) {
       float theta11 = -degrees(theta1 - theta1%0.01);
       float theta22 = -degrees(theta2 - theta2%0.01);
