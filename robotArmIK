@@ -10,7 +10,7 @@ float nextTheta1 = 90;
 float nextTheta2 = 90;
 float jumpLimit = 2;
 int counter = 0;
-int l = 450; //mm
+int l = 400; //mm
 int xOffset, yOffset;
 int knobValue = 1500;
 int sspeed = 100;
